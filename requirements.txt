@@ -1,4 +1,6 @@
+h5py==3.11.0
 numpy==1.26.4
 pyglet==1.5.29
+Rtree==1.2.0
 scipy==1.14.0
 trimesh==4.4.1
