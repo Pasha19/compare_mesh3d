@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
 import trimesh
+import trimesh.voxel.ops as ops
 
 
 def create_mesh(width: float, height: float) -> trimesh.Trimesh:
@@ -26,12 +27,15 @@ def voxelize(mesh: trimesh.Trimesh, voxsize: float) -> trimesh.voxel.VoxelGrid:
 
 def main() -> None:
     mesh = create_mesh(1.0, 2.0)
-    # mesh.export("test.stl")
+    mesh.export("test.stl")
     rot = trimesh.transformations.rotation_matrix(np.pi/3, (0, 0, 1))
     mesh.apply_transform(rot)
-    volume = voxelize(mesh, 0.01)
-    # with h5py.File("test.h5", "w") as f:
-    #     f.create_dataset("volume", data=volume.matrix, compression="gzip")
+    voxsize = 0.01
+    volume = voxelize(mesh, voxsize)
+    with h5py.File("test.h5", "w") as f:
+        f.create_dataset("volume", data=volume.matrix, compression="gzip")
+    restored = ops.matrix_to_marching_cubes(volume.matrix, voxsize)
+    restored.export("restored.stl")
 
 
 if __name__ == "__main__":
