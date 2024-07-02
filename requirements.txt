@@ -1,6 +1,13 @@
 h5py==3.11.0
+imageio==2.34.2
+lazy_loader==0.4
+networkx==3.3
 numpy==1.26.4
+packaging==24.1
+pillow==10.4.0
 pyglet==1.5.29
 Rtree==1.2.0
+scikit-image==0.24.0
 scipy==1.14.0
+tifffile==2024.6.18
 trimesh==4.4.1
