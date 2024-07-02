@@ -1,12 +1,16 @@
 import h5py
+import numpy as np
 import trimesh
 
 
-def create_mesh(side: float, void: float) -> trimesh.Trimesh:
-    outer = trimesh.creation.box((side, side, side))
-    inner = trimesh.creation.box((void, void, void))
-    inner.invert()
-    return trimesh.util.concatenate(inner, outer)
+def create_mesh(width: float, height: float) -> trimesh.Trimesh:
+    box = trimesh.creation.box((width, width, height))
+    cyl = trimesh.creation.cylinder(radius=width/3, height=height/1.5)
+    cyl.invert()
+    sphere = trimesh.creation.icosphere(radius=min(width/10, height/10))
+    sphere.apply_translation((0.4*width, 0.4*width, 0.4*height))
+    sphere.invert()
+    return trimesh.util.concatenate((box, cyl, sphere))
 
 
 def voxelize(mesh: trimesh.Trimesh, voxsize: float) -> trimesh.voxel.VoxelGrid:
@@ -21,10 +25,13 @@ def voxelize(mesh: trimesh.Trimesh, voxsize: float) -> trimesh.voxel.VoxelGrid:
 
 
 def main() -> None:
-    mesh = create_mesh(1.0, 0.1)
+    mesh = create_mesh(1.0, 2.0)
+    # mesh.export("test.stl")
+    rot = trimesh.transformations.rotation_matrix(np.pi/3, (0, 0, 1))
+    mesh.apply_transform(rot)
     volume = voxelize(mesh, 0.01)
-    with h5py.File("test.h5", "w") as f:
-        f.create_dataset("volume", data=volume.matrix, compression="gzip")
+    # with h5py.File("test.h5", "w") as f:
+    #     f.create_dataset("volume", data=volume.matrix, compression="gzip")
 
 
 if __name__ == "__main__":
