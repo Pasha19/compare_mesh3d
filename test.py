@@ -25,18 +25,37 @@ def voxelize(mesh: trimesh.Trimesh, voxsize: float) -> trimesh.voxel.VoxelGrid:
     return volume
 
 
-def main() -> None:
-    mesh = create_mesh(1.0, 2.0)
-    mesh.export("test.stl")
+def scale_and_move(mesh: trimesh.Trimesh, src: trimesh.Trimesh) -> None:
+    sphere_mesh: trimesh.primitives.Sphere = mesh.bounding_sphere
+    sphere_src: trimesh.primitives.Sphere = src.bounding_sphere
+    mesh.apply_translation(sphere_src.center - sphere_mesh.center)
+    mesh.apply_scale(sphere_src.primitive.radius / sphere_mesh.primitive.radius)
+
+
+def main_create() -> None:
+    # mesh = create_mesh(1.0, 2.0)
+    mesh = trimesh.creation.box((1.0, 1.0, 1.0))
+    mesh.export("cube_1.stl")
     rot = trimesh.transformations.rotation_matrix(np.pi/3, (0, 0, 1))
+    rot @= trimesh.transformations.rotation_matrix(np.pi/6, (0, 1, 0))
     mesh.apply_transform(rot)
     voxsize = 0.01
     volume = voxelize(mesh, voxsize)
-    with h5py.File("test.h5", "w") as f:
+    with h5py.File("cube_1.h5", "w") as f:
         f.create_dataset("volume", data=volume.matrix, compression="gzip")
     restored = ops.matrix_to_marching_cubes(volume.matrix, voxsize)
-    restored.export("restored.stl")
+    scale_and_move(restored, mesh)
+    restored.export("cube_1_r.stl")
+
+
+def main_show() -> None:
+    orig = trimesh.load_mesh("cube_1.stl")
+    mesh = trimesh.load("cube_1_r.stl")
+    scene = trimesh.Scene()
+    scene.add_geometry([orig, mesh])
+    scene.show()
 
 
 if __name__ == "__main__":
-    main()
+    main_create()
+    # main_show()
