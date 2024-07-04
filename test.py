@@ -90,6 +90,28 @@ def global_registration(src, target, voxsize: float) -> np.ndarray:
     return result.transformation
 
 
+def get_distances(src: trimesh.Trimesh, target: trimesh.Trimesh) -> tuple[np.ndarray, np.ndarray]:
+    result = trimesh.proximity.closest_point(target, src.vertices)
+    dist = np.asarray(result[1])
+    norm_dist = (dist - np.min(dist)) / (np.max(dist) - np.min(dist))
+    return dist, norm_dist
+
+
+def add_colors(mesh: trimesh.Trimesh, norm_dist: np.ndarray):
+    res = o3d.geometry.TriangleMesh(
+        o3d.utility.Vector3dVector(np.asarray(mesh.vertices)),
+        o3d.utility.Vector3iVector(np.asarray(mesh.faces)),
+    )
+    res.vertex_normals = o3d.utility.Vector3dVector(mesh.vertex_normals)
+    res.vertex_colors = o3d.utility.Vector3dVector()
+    colors = np.zeros((norm_dist.shape[0], 3), dtype=float)
+    colors[:, 0] = 0.1 + norm_dist * 0.8
+    colors[:, 1] = 0.9 - norm_dist * 0.8
+    colors[:, 2] = 0.1
+    res.vertex_colors = o3d.utility.Vector3dVector(colors)
+    return res
+
+
 def main_create() -> None:
     mesh = create_mesh(1.0, 2.0)
     # mesh = trimesh.creation.box((1.0, 1.0, 1.0))
@@ -124,7 +146,16 @@ def main_icp() -> None:
     mesh.export("mesh_1_2_icp.stl")
 
 
+def main_dist() -> None:
+    mesh = trimesh.load_mesh("mesh_1_2_icp.stl")
+    target = trimesh.load("mesh_1_2.stl")
+    dist, norm_dist = get_distances(mesh, target)
+    # o3d.io.write_triangle_mesh("mesh_1_2_icp.obj", add_colors(mesh, norm_dist))
+    print(f"Max distance: {np.max(dist):.3f}")
+
+
 if __name__ == "__main__":
     # main_create()
     # main_show()
-    main_icp()
+    # main_icp()
+    main_dist()
