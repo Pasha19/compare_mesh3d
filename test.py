@@ -1,4 +1,5 @@
 import h5py
+import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
 import trimesh
@@ -150,8 +151,12 @@ def main_dist() -> None:
     mesh = trimesh.load_mesh("mesh_1_2_icp.stl")
     target = trimesh.load("mesh_1_2.stl")
     dist, norm_dist = get_distances(mesh, target)
-    # o3d.io.write_triangle_mesh("mesh_1_2_icp.obj", add_colors(mesh, norm_dist))
+    o3d.io.write_triangle_mesh("mesh_1_2_icp.obj", add_colors(mesh, norm_dist))
     print(f"Max distance: {np.max(dist):.3f}")
+    plt.hist(dist, bins=20)
+    plt.xlabel("distance")
+    plt.ylabel("vertices")
+    plt.show()
 
 
 if __name__ == "__main__":
