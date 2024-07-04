@@ -1,5 +1,6 @@
 import h5py
 import numpy as np
+import open3d as o3d
 import trimesh
 import trimesh.voxel.ops as ops
 
@@ -32,9 +33,33 @@ def scale_and_move(mesh: trimesh.Trimesh, src: trimesh.Trimesh) -> None:
     mesh.apply_scale(sphere_src.primitive.radius / sphere_mesh.primitive.radius)
 
 
+def icp(file_mesh: str, file_src: str) -> np.ndarray:
+    mesh = o3d.io.read_triangle_mesh(file_mesh)
+    src = o3d.io.read_triangle_mesh(file_src)
+    points_num = 100_000
+    pcd = mesh.sample_points_poisson_disk(points_num)
+    pcd_src = src.sample_points_poisson_disk(points_num)
+    pcd.paint_uniform_color([0.1, 0.1, 0.8])
+    pcd_src.paint_uniform_color([0.1, 0.8, 0.1])
+    # o3d.visualization.draw([pcd, pcd_src])
+    transform = np.identity(4, dtype=float)
+    threshold = 0.03
+    evaluation = o3d.pipelines.registration.evaluate_registration(pcd, pcd_src, threshold, transform)
+    # print(evaluation)
+    p2p = o3d.pipelines.registration.registration_icp(
+        pcd, pcd_src, threshold, transform,
+        o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+        o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=1_000),
+    )
+    # print(p2p)
+    pcd.transform(p2p.transformation)
+    # o3d.visualization.draw([pcd, pcd_src])
+    return p2p.transformation
+
+
 def main_create() -> None:
-    # mesh = create_mesh(1.0, 2.0)
-    mesh = trimesh.creation.box((1.0, 1.0, 1.0))
+    mesh = create_mesh(1.0, 2.0)
+    # mesh = trimesh.creation.box((1.0, 1.0, 1.0))
     mesh.export("cube_1.stl")
     rot = trimesh.transformations.rotation_matrix(np.pi/3, (0, 0, 1))
     rot @= trimesh.transformations.rotation_matrix(np.pi/6, (0, 1, 0))
@@ -49,13 +74,23 @@ def main_create() -> None:
 
 
 def main_show() -> None:
-    orig = trimesh.load_mesh("cube_1.stl")
-    mesh = trimesh.load("cube_1_r.stl")
+    orig = trimesh.load_mesh("mesh_1_2.stl")
+    mesh = trimesh.load("mesh_1_2_r.stl")
     scene = trimesh.Scene()
     scene.add_geometry([orig, mesh])
     scene.show()
 
 
+def main_icp() -> None:
+    file_mesh = "mesh_1_2_r.stl"
+    file_src = "mesh_1_2.stl"
+    transform = icp(file_mesh, file_src)
+    mesh = trimesh.load(file_mesh)
+    mesh.apply_transform(transform)
+    mesh.export("mesh_1_2_icp.stl")
+
+
 if __name__ == "__main__":
-    main_create()
+    # main_create()
     # main_show()
+    main_icp()
