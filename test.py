@@ -33,28 +33,61 @@ def scale_and_move(mesh: trimesh.Trimesh, src: trimesh.Trimesh) -> None:
     mesh.apply_scale(sphere_src.primitive.radius / sphere_mesh.primitive.radius)
 
 
-def icp(file_mesh: str, file_src: str) -> np.ndarray:
-    mesh = o3d.io.read_triangle_mesh(file_mesh)
-    src = o3d.io.read_triangle_mesh(file_src)
+def show_pcds(pcd, pcd_src, transform: np.ndarray = np.identity(4, dtype=float)) -> None:
+    import copy
+    pcd_tmp = copy.deepcopy(pcd)
+    pcd_src_tmp = copy.deepcopy(pcd_src)
+    pcd_tmp.paint_uniform_color([0.1, 0.1, 0.8])
+    pcd_src_tmp.paint_uniform_color([0.1, 0.8, 0.1])
+    pcd.transform(transform)
+    o3d.visualization.draw([pcd_tmp, pcd_src_tmp])
+
+
+def icp(mesh, src) -> np.ndarray:
     points_num = 100_000
     pcd = mesh.sample_points_poisson_disk(points_num)
     pcd_src = src.sample_points_poisson_disk(points_num)
-    pcd.paint_uniform_color([0.1, 0.1, 0.8])
-    pcd_src.paint_uniform_color([0.1, 0.8, 0.1])
-    # o3d.visualization.draw([pcd, pcd_src])
-    transform = np.identity(4, dtype=float)
-    threshold = 0.03
-    evaluation = o3d.pipelines.registration.evaluate_registration(pcd, pcd_src, threshold, transform)
+    transform = global_registration(pcd, pcd_src, 0.05)
+    # show_pcds(pcd, pcd_src, transform)
+    threshold = 0.012
+    # evaluation = o3d.pipelines.registration.evaluate_registration(pcd, pcd_src, threshold, transform)
     # print(evaluation)
     p2p = o3d.pipelines.registration.registration_icp(
         pcd, pcd_src, threshold, transform,
         o3d.pipelines.registration.TransformationEstimationPointToPoint(),
-        o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=1_000),
+        o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=2_000),
     )
     # print(p2p)
-    pcd.transform(p2p.transformation)
-    # o3d.visualization.draw([pcd, pcd_src])
+    # show_pcds(pcd, pcd_src, p2p.transformation)
     return p2p.transformation
+
+
+def preprocess(pcd, voxsize: float) -> tuple[any, any]:
+    pcd_ds = pcd.voxel_down_sample(voxsize)
+    pcd_ds.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=2*voxsize, max_nn=30))
+    pcd_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
+        pcd_ds,
+        o3d.geometry.KDTreeSearchParamHybrid(radius=5*voxsize, max_nn=100)
+    )
+    return pcd_ds, pcd_fpfh
+
+
+def global_registration(src, target, voxsize: float) -> np.ndarray:
+    src_ds, src_fpfh = preprocess(src, voxsize)
+    target_ds, target_fpfh = preprocess(target, voxsize)
+    # show_pcds(src_ds, target_ds)
+    distance_threshold = 1.5 * voxsize
+    result = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
+        src_ds, target_ds, src_fpfh, target_fpfh, True,
+        distance_threshold,
+        o3d.pipelines.registration.TransformationEstimationPointToPoint(False),
+        3, [
+            o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
+            o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(distance_threshold)
+        ],
+        o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 0.999)
+    )
+    return result.transformation
 
 
 def main_create() -> None:
@@ -83,8 +116,9 @@ def main_show() -> None:
 
 def main_icp() -> None:
     file_mesh = "mesh_1_2_r.stl"
-    file_src = "mesh_1_2.stl"
-    transform = icp(file_mesh, file_src)
+    mesh = o3d.io.read_triangle_mesh(file_mesh)
+    src = o3d.io.read_triangle_mesh("mesh_1_2.stl")
+    transform = icp(mesh, src)
     mesh = trimesh.load(file_mesh)
     mesh.apply_transform(transform)
     mesh.export("mesh_1_2_icp.stl")
