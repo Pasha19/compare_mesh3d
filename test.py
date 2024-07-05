@@ -7,13 +7,7 @@ import trimesh.voxel.ops as ops
 
 
 def create_mesh(width: float, height: float) -> trimesh.Trimesh:
-    box = trimesh.creation.box((width, width, height))
-    cyl = trimesh.creation.cylinder(radius=width/3, height=height/1.5)
-    cyl.invert()
-    sphere = trimesh.creation.icosphere(radius=min(width/10, height/10))
-    sphere.apply_translation((0.4*width, 0.4*width, 0.4*height))
-    sphere.invert()
-    return trimesh.util.concatenate((box, cyl, sphere))
+    return trimesh.creation.box((width, width, height))
 
 
 def voxelize(mesh: trimesh.Trimesh, voxsize: float) -> trimesh.voxel.VoxelGrid:
@@ -27,11 +21,12 @@ def voxelize(mesh: trimesh.Trimesh, voxsize: float) -> trimesh.voxel.VoxelGrid:
     return volume
 
 
-def scale_and_move(mesh: trimesh.Trimesh, src: trimesh.Trimesh) -> None:
+def rotate_back_and_move(mesh: trimesh.Trimesh, src: trimesh.Trimesh, transform: np.array) -> None:
+    mesh.apply_transform(np.linalg.inv(transform))
     sphere_mesh: trimesh.primitives.Sphere = mesh.bounding_sphere
     sphere_src: trimesh.primitives.Sphere = src.bounding_sphere
     mesh.apply_translation(sphere_src.center - sphere_mesh.center)
-    mesh.apply_scale(sphere_src.primitive.radius / sphere_mesh.primitive.radius)
+    # mesh.apply_scale(sphere_src.primitive.radius / sphere_mesh.primitive.radius)
 
 
 def show_pcds(pcd, pcd_src, transform: np.ndarray = np.identity(4, dtype=float)) -> None:
@@ -115,18 +110,16 @@ def add_colors(mesh: trimesh.Trimesh, norm_dist: np.ndarray):
 
 def main_create() -> None:
     mesh = create_mesh(1.0, 2.0)
-    # mesh = trimesh.creation.box((1.0, 1.0, 1.0))
-    mesh.export("cube_1.stl")
-    rot = trimesh.transformations.rotation_matrix(np.pi/3, (0, 0, 1))
-    rot @= trimesh.transformations.rotation_matrix(np.pi/6, (0, 1, 0))
+    mesh.export("box_1_1_2.stl")
+    rot = trimesh.transformations.rotation_matrix(np.pi/18, (0, 0, 1))
     mesh.apply_transform(rot)
     voxsize = 0.01
     volume = voxelize(mesh, voxsize)
-    with h5py.File("cube_1.h5", "w") as f:
+    with h5py.File("box_1_1_2_r.h5", "w") as f:
         f.create_dataset("volume", data=volume.matrix, compression="gzip")
     restored = ops.matrix_to_marching_cubes(volume.matrix, voxsize)
-    scale_and_move(restored, mesh)
-    restored.export("cube_1_r.stl")
+    rotate_back_and_move(restored, mesh, rot)
+    restored.export("box_1_1_2_r.stl")
 
 
 def main_show() -> None:
@@ -138,25 +131,25 @@ def main_show() -> None:
 
 
 def main_icp() -> None:
-    file_mesh = "mesh_1_2_r.stl"
+    file_mesh = "box_1_1_2_r.stl"
     mesh = o3d.io.read_triangle_mesh(file_mesh)
-    src = o3d.io.read_triangle_mesh("mesh_1_2.stl")
+    src = o3d.io.read_triangle_mesh("box_1_1_2.stl")
     transform = icp(mesh, src)
     mesh = trimesh.load(file_mesh)
     mesh.apply_transform(transform)
-    mesh.export("mesh_1_2_icp.stl")
+    mesh.export("box_1_1_2_r_icp.stl")
 
 
 def main_dist() -> None:
-    mesh = trimesh.load_mesh("mesh_1_2_icp.stl")
-    target = trimesh.load("mesh_1_2.stl")
+    mesh = trimesh.load_mesh("box_1_1_2_r_icp.stl")
+    target = trimesh.load("box_1_1_2.stl")
     dist, norm_dist = get_distances(mesh, target)
-    o3d.io.write_triangle_mesh("mesh_1_2_icp.obj", add_colors(mesh, norm_dist))
+    o3d.io.write_triangle_mesh("box_1_1_2_r_icp.obj", add_colors(mesh, norm_dist))
     print(f"Max distance: {np.max(dist):.3f}")
     plt.hist(dist, bins=20)
     plt.xlabel("distance")
     plt.ylabel("vertices")
-    plt.show()
+    plt.savefig("box_1_1_2_r_icp.png")
 
 
 if __name__ == "__main__":
