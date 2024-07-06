@@ -1,3 +1,4 @@
+import copy
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,7 +27,6 @@ def rotate_back_and_move(mesh: trimesh.Trimesh, src: trimesh.Trimesh, transform:
 
 
 def show_pcds(pcd, pcd_src, transform: np.ndarray = np.identity(4, dtype=float)) -> None:
-    import copy
     pcd_tmp = copy.deepcopy(pcd)
     pcd_src_tmp = copy.deepcopy(pcd_src)
     pcd_tmp.paint_uniform_color([0.1, 0.1, 0.8])
@@ -142,8 +142,23 @@ def add_circle(
     return ids, n
 
 
+def create_xz_plane(width: int, height: int) -> trimesh.Trimesh:
+    points = [[(width + 1) * j + i for i in range(width+1)] for j in range(height+1)]
+    faces = []
+    for z in range(height):
+        for x in range(width):
+            faces.append((points[z][x], points[z+1][x], points[z+1][x+1]))
+            faces.append((points[z][x], points[z+1][x+1], points[z][x+1]))
+    vertices_list = [(j, 0, i) for i in range(height + 1) for j in range(width + 1)]
+    return trimesh.Trimesh(
+        vertices=np.asarray(vertices_list, dtype=float),
+        faces=np.asarray(faces, dtype=int),
+    )
+
+
 def generate_plane(size: int) -> trimesh.Trimesh:
     side = 48
+    height = 8
     radius = 2
     centers = [
         (6,  6),   # 1
@@ -193,19 +208,38 @@ def generate_plane(size: int) -> trimesh.Trimesh:
                 continue
             plane_faces.append((plane_vertices[y][x], plane_vertices[y+1][x], plane_vertices[y+1][x+1]))
             plane_faces.append((plane_vertices[y][x], plane_vertices[y+1][x+1], plane_vertices[y][x+1]))
-
     plane_vertices_list = [(j, i) for i in range(side+1) for j in range(side+1) if plane_vertices[i][j] != -1]
     for (xc, yc) in centers:
         ids, n = add_circle((xc, yc), n, radius, plane_vertices, plane_vertices_list, plane_faces)
-    vertices = np.asarray([((x - side//2) / size, (y - side//2) / size, 0) for x, y in plane_vertices_list], dtype=float)
+    vertices = np.asarray([(x, y, 0) for x, y in plane_vertices_list], dtype=float)
     faces = np.asarray(plane_faces, dtype=int)
     plane = trimesh.Trimesh(vertices=vertices, faces=faces)
-    return plane
+    plane_bottom = copy.deepcopy(plane)
+    plane.apply_translation((0, 0, height))
+    plane.invert()
+    obj = trimesh.util.concatenate(plane, plane_bottom)
+    wall = create_xz_plane(side, height)
+    wall.invert()
+    obj = trimesh.util.concatenate(obj, wall)
+    wall.apply_translation((0, side, 0))
+    wall.invert()
+    obj = trimesh.util.concatenate(obj, wall)
+    wall.apply_translation((0, -side, 0))
+    wall.apply_transform(trimesh.transformations.rotation_matrix(np.pi/2, (0, 0, 1)))
+    obj = trimesh.util.concatenate(obj, wall)
+    wall.apply_translation((side, 0, 0))
+    wall.invert()
+    obj = trimesh.util.concatenate(obj, wall)
+    obj.process()
+    obj.apply_translation((-side//2, -side//2, -height//2))
+    obj.apply_scale(1/size)
+    return obj
 
 
 def main_create() -> None:
     mesh = generate_plane(10)
     mesh.export("plane.stl")
+    return
     rot = trimesh.transformations.rotation_matrix(np.pi/18, (0, 0, 1))
     mesh.apply_transform(rot)
     voxsize = 0.01
