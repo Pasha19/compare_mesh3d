@@ -142,16 +142,41 @@ def add_circle(
     return ids, n
 
 
-def create_xz_plane(width: int, height: int) -> trimesh.Trimesh:
-    points = [[(width + 1) * j + i for i in range(width+1)] for j in range(height+1)]
+def helper_create_faces(points: list[list[int]], width: int, height: int) -> list[tuple[int, int, int]]:
     faces = []
     for z in range(height):
         for x in range(width):
             faces.append((points[z][x], points[z+1][x], points[z+1][x+1]))
             faces.append((points[z][x], points[z+1][x+1], points[z][x+1]))
+    return faces
+
+
+def create_xz_plane(width: int, height: int) -> trimesh.Trimesh:
+    points = [[(width + 1) * j + i for i in range(width+1)] for j in range(height+1)]
+    faces = helper_create_faces(points, width, height)
     vertices_list = [(j, 0, i) for i in range(height + 1) for j in range(width + 1)]
     return trimesh.Trimesh(
         vertices=np.asarray(vertices_list, dtype=float),
+        faces=np.asarray(faces, dtype=int),
+    )
+
+
+def create_inner_cylinder(radius: int, height: int, angles: int) -> trimesh.Trimesh:
+    vertices = []
+    for i in range(height+1):
+        for j in range(angles):
+            a = 2*np.pi * j / angles
+            vertices.append((radius * np.cos(a), radius * np.sin(a), i))
+    vertices_ind = []
+    for i in range(height+1):
+        row = []
+        for j in range(angles):
+            row.append(i*angles + j)
+        row.append(i*angles)
+        vertices_ind.append(row)
+    faces = helper_create_faces(vertices_ind, angles, height)
+    return trimesh.Trimesh(
+        vertices=np.asarray(vertices, dtype=float),
         faces=np.asarray(faces, dtype=int),
     )
 
@@ -230,6 +255,11 @@ def generate_plane(size: int) -> trimesh.Trimesh:
     wall.apply_translation((side, 0, 0))
     wall.invert()
     obj = trimesh.util.concatenate(obj, wall)
+    cyl = create_inner_cylinder(radius, height, 32)
+    for (xc, yc) in centers:
+        cyl.apply_translation((xc, yc, 0))
+        obj = trimesh.util.concatenate(obj, cyl)
+        cyl.apply_translation((-xc, -yc, 0))
     obj.process()
     obj.apply_translation((-side//2, -side//2, -height//2))
     obj.apply_scale(1/size)
@@ -239,16 +269,15 @@ def generate_plane(size: int) -> trimesh.Trimesh:
 def main_create() -> None:
     mesh = generate_plane(10)
     mesh.export("plane.stl")
-    return
     rot = trimesh.transformations.rotation_matrix(np.pi/18, (0, 0, 1))
     mesh.apply_transform(rot)
-    voxsize = 0.01
+    voxsize = 0.025
     volume = voxelize(mesh, voxsize)
-    with h5py.File("plate_r10.h5", "w") as f:
+    with h5py.File("plane_r10.h5", "w") as f:
         f.create_dataset("volume", data=volume.matrix, compression="gzip")
     restored = ops.matrix_to_marching_cubes(volume.matrix, voxsize)
     rotate_back_and_move(restored, mesh, rot)
-    restored.export("plate_r10.stl")
+    restored.export("plane_r10.stl")
 
 
 def main_show() -> None:
