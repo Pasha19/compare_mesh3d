@@ -6,10 +6,6 @@ import trimesh
 import trimesh.voxel.ops as ops
 
 
-def create_mesh(width: float, height: float) -> trimesh.Trimesh:
-    return trimesh.creation.box((width, width, height))
-
-
 def voxelize(mesh: trimesh.Trimesh, voxsize: float) -> trimesh.voxel.VoxelGrid:
     sphere: trimesh.primitives.Sphere = mesh.bounding_sphere
     if not hasattr(sphere.primitive, "radius"):
@@ -108,18 +104,61 @@ def add_colors(mesh: trimesh.Trimesh, norm_dist: np.ndarray):
     return res
 
 
+def generate_plate(size: int) -> trimesh.Trimesh:
+    side = 48
+    height = 8
+    radius = 2
+    centers = [
+        (6,  6),   # 1
+        (12, 6),   # 2
+        (18, 6),   # 3
+        (24, 6),   # 4
+        (33, 6),   # 5
+        (42, 6),   # 6
+        (6,  12),  # 7
+        (24, 12),  # 8
+        (39, 12),  # 9
+        (15, 15),  # 10
+        (6,  18),  # 11
+        (24, 18),  # 12
+        (36, 18),  # 13
+        (6,  24),  # 14
+        (12, 24),  # 15
+        (18, 24),  # 16
+        (24, 24),  # 17
+        (33, 24),  # 18
+        (42, 24),  # 19
+        (30, 30),  # 20
+        (6,  33),  # 21
+        (24, 33),  # 22
+        (18, 36),  # 23
+        (36, 36),  # 24
+        (12, 39),  # 25
+        (6,  42),  # 26
+        (18, 42),  # 27
+        (42, 42),  # 28
+    ]
+    centers = map(lambda p: (p[0] - side//2, p[1] - side//2), centers)
+    box = trimesh.creation.box((side/size, side/size, height/size))
+    for x, y in centers:
+        cyl = trimesh.creation.cylinder(radius/size, height/size)
+        cyl.apply_translation((x/size, y/size, 0))
+        box = trimesh.boolean.difference([box, cyl])
+    return box
+
+
 def main_create() -> None:
-    mesh = create_mesh(1.0, 2.0)
-    mesh.export("box_1_1_2.stl")
+    mesh = generate_plate(10)
+    mesh.export("plate.stl")
     rot = trimesh.transformations.rotation_matrix(np.pi/18, (0, 0, 1))
     mesh.apply_transform(rot)
     voxsize = 0.01
     volume = voxelize(mesh, voxsize)
-    with h5py.File("box_1_1_2_r.h5", "w") as f:
+    with h5py.File("plate_r10.h5", "w") as f:
         f.create_dataset("volume", data=volume.matrix, compression="gzip")
     restored = ops.matrix_to_marching_cubes(volume.matrix, voxsize)
     rotate_back_and_move(restored, mesh, rot)
-    restored.export("box_1_1_2_r.stl")
+    restored.export("plate_r10.stl")
 
 
 def main_show() -> None:
@@ -153,7 +192,7 @@ def main_dist() -> None:
 
 
 if __name__ == "__main__":
-    # main_create()
+    main_create()
     # main_show()
     # main_icp()
-    main_dist()
+    # main_dist()
