@@ -104,9 +104,46 @@ def add_colors(mesh: trimesh.Trimesh, norm_dist: np.ndarray):
     return res
 
 
-def generate_plate(size: int) -> trimesh.Trimesh:
+def add_circle(
+        center: tuple[int, int],
+        n: int,
+        radius: int,
+        plane_vertices: list[list[int]],
+        plane_vertices_list: list[tuple[(int | float), (int | float)]],
+        plane_indices: list[tuple[int, int, int]]
+) -> (list[int], int):
+    xc, yc = center
+    right = plane_vertices[yc][xc+radius]
+    top = plane_vertices[yc+radius][xc]
+    left = plane_vertices[yc][xc-radius]
+    bottom = plane_vertices[yc-radius][xc]
+    top_right = plane_vertices[yc+radius][xc+radius]
+    top_left = plane_vertices[yc+radius][xc-radius]
+    bottom_left = plane_vertices[yc-radius][xc-radius]
+    bottom_right = plane_vertices[yc-radius][xc+radius]
+    ids = [right]
+
+    def helper(start: int, stop: int, corner: int, last: int) -> None:
+        nonlocal n
+        for i in range(start, stop):
+            angle = np.pi * i / 16
+            point = radius * np.cos(angle), radius * np.sin(angle)
+            plane_indices.append((ids[-1], n, corner))
+            ids.append(n)
+            n += 1
+            plane_vertices_list.append((point[0] + xc, point[1] + yc))
+        plane_indices.append((ids[-1], last, corner))
+        ids.append(last)
+
+    helper(1, 8, top_right, top)
+    helper(9, 16, top_left, left)
+    helper(17, 24, bottom_left, bottom)
+    helper(25, 32, bottom_right, right)
+    return ids, n
+
+
+def generate_plane(size: int) -> trimesh.Trimesh:
     side = 48
-    height = 8
     radius = 2
     centers = [
         (6,  6),   # 1
@@ -135,21 +172,40 @@ def generate_plate(size: int) -> trimesh.Trimesh:
         (36, 36),  # 24
         (12, 39),  # 25
         (6,  42),  # 26
-        (18, 42),  # 27
+        (24, 42),  # 27
         (42, 42),  # 28
     ]
-    centers = map(lambda p: (p[0] - side//2, p[1] - side//2), centers)
-    box = trimesh.creation.box((side/size, side/size, height/size))
-    for x, y in centers:
-        cyl = trimesh.creation.cylinder(radius/size, height/size)
-        cyl.apply_translation((x/size, y/size, 0))
-        box = trimesh.boolean.difference([box, cyl])
-    return box
+    exclude_vertices = {(x+i, y+j) for i in range(1-radius, radius) for j in range(1-radius, radius) for x, y in centers}
+    plane_vertices = [[-1 for _ in range(side+1)] for _ in range(side+1)]
+    n = 0
+    for y in range(side+1):
+        for x in range(side+1):
+            if (x, y) not in exclude_vertices:
+                plane_vertices[y][x] = n
+                n += 1
+    plane_faces = []
+    for y in range(side):
+        for x in range(side):
+            if plane_vertices[y][x] == -1 or \
+                    plane_vertices[y+1][x] == -1 or \
+                    plane_vertices[y][x+1] == -1 or \
+                    plane_vertices[y+1][x+1] == -1:
+                continue
+            plane_faces.append((plane_vertices[y][x], plane_vertices[y+1][x], plane_vertices[y+1][x+1]))
+            plane_faces.append((plane_vertices[y][x], plane_vertices[y+1][x+1], plane_vertices[y][x+1]))
+
+    plane_vertices_list = [(j, i) for i in range(side+1) for j in range(side+1) if plane_vertices[i][j] != -1]
+    for (xc, yc) in centers:
+        ids, n = add_circle((xc, yc), n, radius, plane_vertices, plane_vertices_list, plane_faces)
+    vertices = np.asarray([((x - side//2) / size, (y - side//2) / size, 0) for x, y in plane_vertices_list], dtype=float)
+    faces = np.asarray(plane_faces, dtype=int)
+    plane = trimesh.Trimesh(vertices=vertices, faces=faces)
+    return plane
 
 
 def main_create() -> None:
-    mesh = generate_plate(10)
-    mesh.export("plate.stl")
+    mesh = generate_plane(10)
+    mesh.export("plane.stl")
     rot = trimesh.transformations.rotation_matrix(np.pi/18, (0, 0, 1))
     mesh.apply_transform(rot)
     voxsize = 0.01
