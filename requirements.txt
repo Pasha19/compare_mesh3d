@@ -33,7 +33,6 @@ jupyter_core==5.7.2
 jupyterlab_widgets==3.0.11
 kiwisolver==1.4.5
 lazy_loader==0.4
-manifold3d==2.5.1
 MarkupSafe==2.1.5
 matplotlib==3.9.1
 matplotlib-inline==0.1.7
