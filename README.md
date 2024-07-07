@@ -28,3 +28,27 @@
 ## Поворот 10&#xb0;, с ICP
 
 ![box_1_1_2_r10_icp](static/box_1_1_2_r10_icp.png)
+
+# Параметры
+
+![plane](https://ars.els-cdn.com/content/image/1-s2.0-S2214657116300065-gr004_lrg.jpg)
+
+Размеры 4.8x4.8x0.8.
+Размер вокселя - 0.02.
+
+# Результаты
+
+|  Поворот | ICP                | Расстояние |
+|---------:|--------------------|-----------:|
+|        0 |                    |      0.020 |
+|        0 | :heavy_check_mark: |      0.020 |
+| 10&#xb0; |                    |      0.022 |
+| 10&#xb0; | :heavy_check_mark: |      0.022 |
+
+![plane_r0](static/plane_r0.png)
+
+![plane_r0_icp](static/plane_r0_icp.png)
+
+![plane_r10](static/plane_r10.png)
+
+![plane_r10_icp](static/plane_r10_icp.png)

@@ -36,21 +36,21 @@ def show_pcds(pcd, pcd_src, transform: np.ndarray = np.identity(4, dtype=float))
 
 
 def icp(mesh, src) -> np.ndarray:
-    points_num = 100_000
+    points_num = 500_000
     pcd = mesh.sample_points_poisson_disk(points_num)
     pcd_src = src.sample_points_poisson_disk(points_num)
     transform = global_registration(pcd, pcd_src, 0.05)
     # show_pcds(pcd, pcd_src, transform)
-    threshold = 0.012
-    # evaluation = o3d.pipelines.registration.evaluate_registration(pcd, pcd_src, threshold, transform)
-    # print(evaluation)
+    threshold = 0.025
+    evaluation = o3d.pipelines.registration.evaluate_registration(pcd, pcd_src, threshold, transform)
+    print(evaluation)
     p2p = o3d.pipelines.registration.registration_icp(
         pcd, pcd_src, threshold, transform,
         o3d.pipelines.registration.TransformationEstimationPointToPoint(),
         o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=2_000),
     )
-    # print(p2p)
-    # show_pcds(pcd, pcd_src, p2p.transformation)
+    print(p2p)
+    show_pcds(pcd, pcd_src, p2p.transformation)
     return p2p.transformation
 
 
@@ -271,7 +271,7 @@ def main_create() -> None:
     mesh.export("plane.stl")
     rot = trimesh.transformations.rotation_matrix(np.pi/18, (0, 0, 1))
     mesh.apply_transform(rot)
-    voxsize = 0.025
+    voxsize = 0.02
     volume = voxelize(mesh, voxsize)
     with h5py.File("plane_r10.h5", "w") as f:
         f.create_dataset("volume", data=volume.matrix, compression="gzip")
@@ -289,29 +289,30 @@ def main_show() -> None:
 
 
 def main_icp() -> None:
-    file_mesh = "box_1_1_2_r.stl"
+    file_mesh = "plane_r10.stl"
     mesh = o3d.io.read_triangle_mesh(file_mesh)
-    src = o3d.io.read_triangle_mesh("box_1_1_2.stl")
+    src = o3d.io.read_triangle_mesh("plane.stl")
     transform = icp(mesh, src)
     mesh = trimesh.load(file_mesh)
     mesh.apply_transform(transform)
-    mesh.export("box_1_1_2_r_icp.stl")
+    mesh.export("plane_r10_icp.stl")
 
 
 def main_dist() -> None:
-    mesh = trimesh.load_mesh("box_1_1_2_r_icp.stl")
-    target = trimesh.load("box_1_1_2.stl")
+    mesh = trimesh.load_mesh("plane_r10_icp.stl")
+    target = trimesh.load("plane.stl")
     dist, norm_dist = get_distances(mesh, target)
-    o3d.io.write_triangle_mesh("box_1_1_2_r_icp.obj", add_colors(mesh, norm_dist))
+    o3d.io.write_triangle_mesh("plane_r10_icp.obj", add_colors(mesh, norm_dist))
     print(f"Max distance: {np.max(dist):.3f}")
     plt.hist(dist, bins=20)
+    plt.title("10 - ICP")
     plt.xlabel("distance")
     plt.ylabel("vertices")
-    plt.savefig("box_1_1_2_r_icp.png")
+    plt.savefig("plane_r10_icp.png")
 
 
 if __name__ == "__main__":
-    main_create()
+    # main_create()
     # main_show()
-    # main_icp()
-    # main_dist()
+    main_icp()
+    main_dist()
