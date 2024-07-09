@@ -7,23 +7,41 @@ import trimesh
 import trimesh.voxel.ops as ops
 
 
-def voxelize(mesh: trimesh.Trimesh, voxsize: float) -> trimesh.voxel.VoxelGrid:
+def rotate(
+        mesh: trimesh.Trimesh,
+        e_axis: tuple[float, float, float],
+        angle: float,
+) -> tuple[trimesh.Trimesh, np.ndarray]:
+    new_mesh = copy.deepcopy(mesh)
+    rot = trimesh.transformations.rotation_matrix(angle, e_axis)
+    new_mesh.apply_transform(rot)
+    return new_mesh, rot
+
+
+def voxelize(mesh: trimesh.Trimesh, vox_size: float) -> trimesh.voxel.VoxelGrid:
     sphere: trimesh.primitives.Sphere = mesh.bounding_sphere
     if not hasattr(sphere.primitive, "radius"):
         raise RuntimeError("Sphere has no radius")
-    radius = int(sphere.primitive.radius / voxsize + 0.5)
-    volume = trimesh.voxel.creation.local_voxelize(mesh, sphere.center, voxsize, radius)
+    radius = int(sphere.primitive.radius / vox_size + 0.5)
+    volume = trimesh.voxel.creation.local_voxelize(mesh, sphere.center, vox_size, radius)
     if volume is None:
         raise RuntimeError("Could not voxelize mesh")
     return volume
 
 
-def rotate_back_and_move(mesh: trimesh.Trimesh, src: trimesh.Trimesh, transform: np.array) -> None:
+def restore_rotate_and_move_back(
+        volume: np.ndarray,
+        vox_size: float,
+        src: trimesh.Trimesh,
+        transform: np.array
+) -> trimesh.Trimesh:
+    mesh = ops.matrix_to_marching_cubes(volume, vox_size)
     mesh.apply_transform(np.linalg.inv(transform))
     sphere_mesh: trimesh.primitives.Sphere = mesh.bounding_sphere
     sphere_src: trimesh.primitives.Sphere = src.bounding_sphere
     mesh.apply_translation(sphere_src.center - sphere_mesh.center)
     # mesh.apply_scale(sphere_src.primitive.radius / sphere_mesh.primitive.radius)
+    return mesh
 
 
 def show_pcds(pcd, pcd_src, transform: np.ndarray = np.identity(4, dtype=float)) -> None:
@@ -266,28 +284,6 @@ def generate_plane(size: int) -> trimesh.Trimesh:
     return obj
 
 
-def main_create() -> None:
-    mesh = generate_plane(10)
-    mesh.export("plane.stl")
-    rot = trimesh.transformations.rotation_matrix(np.pi/18, (0, 0, 1))
-    mesh.apply_transform(rot)
-    voxsize = 0.02
-    volume = voxelize(mesh, voxsize)
-    with h5py.File("plane_r10.h5", "w") as f:
-        f.create_dataset("volume", data=volume.matrix, compression="gzip")
-    restored = ops.matrix_to_marching_cubes(volume.matrix, voxsize)
-    rotate_back_and_move(restored, mesh, rot)
-    restored.export("plane_r10.stl")
-
-
-def main_show() -> None:
-    orig = trimesh.load_mesh("mesh_1_2.stl")
-    mesh = trimesh.load("mesh_1_2_r.stl")
-    scene = trimesh.Scene()
-    scene.add_geometry([orig, mesh])
-    scene.show()
-
-
 def main_icp() -> None:
     file_mesh = "plane_r10.stl"
     mesh = o3d.io.read_triangle_mesh(file_mesh)
@@ -312,7 +308,5 @@ def main_dist() -> None:
 
 
 if __name__ == "__main__":
-    # main_create()
-    # main_show()
     main_icp()
     main_dist()
