@@ -63,7 +63,10 @@ def compare_mesh(source: trimesh.Trimesh, restored: trimesh.Trimesh, data: dict)
     data["result"] = {
         "min_dist": np.min(dist),
         "max_dist": np.max(dist),
+        "quantile": [],
     }
+    for q in [0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98, 0.99]:
+        data["result"]["quantile"] = [q, np.quantile(dist, q)]
     return func.add_colors(restored, norm_dist), dist
 
 
