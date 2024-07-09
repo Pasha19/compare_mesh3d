@@ -34,4 +34,6 @@ tifffile==2024.6.18
 torch==2.3.1
 trimesh==4.4.1
 typing_extensions==4.12.2
+vedo==2024.5.2
+vtk==9.3.1
 Werkzeug==3.0.3
