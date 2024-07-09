@@ -1,6 +1,4 @@
 import copy
-import h5py
-import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
 import trimesh
@@ -294,19 +292,5 @@ def main_icp() -> None:
     mesh.export("plane_r10_icp.stl")
 
 
-def main_dist() -> None:
-    mesh = trimesh.load_mesh("plane_r10_icp.stl")
-    target = trimesh.load("plane.stl")
-    dist, norm_dist = get_distances(mesh, target)
-    o3d.io.write_triangle_mesh("plane_r10_icp.obj", add_colors(mesh, norm_dist))
-    print(f"Max distance: {np.max(dist):.3f}")
-    plt.hist(dist, bins=20)
-    plt.title("10 - ICP")
-    plt.xlabel("distance")
-    plt.ylabel("vertices")
-    plt.savefig("plane_r10_icp.png")
-
-
 if __name__ == "__main__":
     main_icp()
-    main_dist()

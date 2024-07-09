@@ -4,7 +4,9 @@ import argparse
 import datetime
 import h5py
 import json
+import matplotlib.pyplot as plt
 import numpy as np
+import open3d as o3d
 import os
 import pathlib
 import random
@@ -48,13 +50,52 @@ def gen(root: str, num: int, vox_size: float) -> None:
         voxels = func.voxelize(rot_mesh, vox_size).matrix
         with h5py.File(os.path.join(rot_dir, "voxels.h5"), "w") as f:
             f.create_dataset("volume", data=voxels, compression="gzip")
-            f.attrs["voxel_size"] = vox_size
         restored = func.restore_rotate_and_move_back(voxels, vox_size, source, transform)
         restored.export(os.path.join(rot_dir, "restored.stl"))
-        with open(os.path.join(rot_dir, "data.json"), 'w') as f:
+        with open(os.path.join(rot_dir, "data.json"), "w") as f:
             json.dump(data, f, indent=4)
         completed += 1
         print(f"rot_{now}_{rand:03} - done {completed}/{num}")
+
+
+def compare_mesh(source: trimesh.Trimesh, restored: trimesh.Trimesh, data: dict) -> tuple[any, np.ndarray]:
+    dist, norm_dist = func.get_distances(restored, source)
+    data["result"] = {
+        "min_dist": np.min(dist),
+        "max_dist": np.max(dist),
+    }
+    return func.add_colors(restored, norm_dist), dist
+
+
+def hist_dist(dist: np.ndarray, file_name: str, title: str) -> None:
+    plt.figure()
+    plt.hist(dist, bins=20)
+    plt.title(title)
+    plt.xlabel("distance")
+    plt.ylabel("vertices")
+    plt.savefig(file_name)
+    plt.close()
+
+
+def compare(root: str) -> None:
+    root_dir = os.path.abspath(root)
+    source = trimesh.load(os.path.join(root_dir, "source.stl"))
+    for rot_dir in pathlib.Path(root_dir).iterdir():
+        if rot_dir.is_file():
+            continue
+        data_json = os.path.join(str(rot_dir), "data.json")
+        if not os.path.exists(data_json):
+            continue
+        data = json.load(open(data_json))
+        if "result" in data:
+            continue
+        restored = trimesh.load(os.path.join(str(rot_dir), "restored.stl"))
+        colored_mesh, dist = compare_mesh(source, restored, data)
+        hist_dist(dist, os.path.join(str(rot_dir), "dist.svg"), "")
+        o3d.io.write_triangle_mesh(os.path.join(str(rot_dir), "restored.obj"), colored_mesh)
+        with open(os.path.join(rot_dir, "data.json"), "w") as f:
+            json.dump(data, f, indent=4)
+        print(f"{data['id']} done")
 
 
 def main() -> None:
@@ -67,6 +108,8 @@ def main() -> None:
     match args.cmd:
         case "gen":
             gen(args.root, args.num, args.vox_size)
+        case "cmp":
+            compare(args.root)
         case _:
             raise ValueError(f"Unknown command {args.cmd}")
 

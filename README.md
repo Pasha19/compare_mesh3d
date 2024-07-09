@@ -6,6 +6,11 @@
 python cli gen data --num 100 --vox-size 0.02
 ```
 
+Сравнить
+```shell
+python cli cmp data
+```
+
 # Параметры
 
 Коробка размером 1x1x2 по осях X, Y, Z. Центр в (0, 0, 0).
