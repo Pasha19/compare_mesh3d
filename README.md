@@ -1,14 +1,7 @@
 # cli
 
-Повернуть, вокселизировать и восстановить.
-
 ```shell
-python cli gen data --num 100 --vox-size 0.02
-```
-
-Сравнить
-```shell
-python cli cmp data
+python cli.py data --num 100 --vox-size 0.02
 ```
 
 # Параметры

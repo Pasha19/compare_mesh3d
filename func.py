@@ -10,10 +10,9 @@ def rotate(
         e_axis: tuple[float, float, float],
         angle: float,
 ) -> tuple[trimesh.Trimesh, np.ndarray]:
-    new_mesh = copy.deepcopy(mesh)
     rot = trimesh.transformations.rotation_matrix(angle, e_axis)
-    new_mesh.apply_transform(rot)
-    return new_mesh, rot
+    mesh.apply_transform(rot)
+    return mesh, rot
 
 
 def voxelize(mesh: trimesh.Trimesh, vox_size: float) -> trimesh.voxel.VoxelGrid:
