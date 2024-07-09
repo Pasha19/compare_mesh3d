@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import trimesh
 import trimesh.voxel.ops as ops
+import vedo
 
 
 def rotate(
@@ -207,3 +208,10 @@ def generate_plane(size: int) -> trimesh.Trimesh:
     obj.apply_translation((-side//2, -side//2, -height//2))
     obj.apply_scale(1/size)
     return obj
+
+
+def icp(target: trimesh.Trimesh, source: trimesh.Trimesh) -> trimesh.Trimesh:
+    target_mesh = vedo.Mesh([target.vertices, target.faces])
+    source_mesh = vedo.Mesh([source.vertices, source.faces])
+    source_mesh.align_to(target_mesh)
+    return trimesh.Trimesh(vertices=source_mesh.vertices, faces=source_mesh.cells)

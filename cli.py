@@ -49,6 +49,47 @@ def create_tables_if_not_exist(connection: sqlite3.Connection) -> None:
         """)
 
 
+def calc_dist(
+        connection: sqlite3.Connection,
+        last_id: int,
+        restored_mesh: trimesh.Trimesh,
+        source: trimesh.Trimesh,
+        icp: bool,
+) -> np.ndarray:
+    dist, _ = func.get_distances(restored_mesh, source)
+    cursor = connection.cursor()
+    with connection:
+        cursor.execute(
+            """
+            INSERT INTO "result"
+            (rotation_data_id, icp, min_dist, max_dist)
+            VALUES (?, ?, ?, ?)
+            """,
+            (last_id, icp, np.min(dist), np.max(dist))
+        )
+        last_id = cursor.lastrowid
+    with connection:
+        for q in [50, 60, 70, 80, 90, 95, 98, 99]:
+            cursor.execute(
+                """
+                INSERT INTO "quantile" (result_id, quantile, "value")
+                VALUES (?, ?, ?)
+                """,
+                (last_id, q, np.quantile(dist, q / 100))
+            )
+    return dist
+
+
+def hist(dist: np.ndarray, e_axis: list[float], angle_grad: int, filename: pathlib.Path, title: str) -> None:
+    plt.figure()
+    plt.hist(dist, bins=20)
+    plt.title(f"{title} axis: ({e_axis[0]:.3f}, {e_axis[1]:.3f}, {e_axis[2]:.3f}) angle: {angle_grad}")
+    plt.xlabel("distance")
+    plt.ylabel("vertices")
+    plt.savefig(filename)
+    plt.close()
+
+
 def process_vec(
         root_path: pathlib.Path,
         connection: sqlite3.Connection,
@@ -74,7 +115,6 @@ def process_vec(
             (now, tmp_vec[0], tmp_vec[1], tmp_vec[2], e_axis[0], e_axis[1], e_axis[2], angle, angle_grad, voxel_size)
         )
         last_id = cursor.lastrowid
-
     dir_path = root_path / f"rot_{now}_{last_id}"
     dir_path.mkdir()
     rotated_mesh, transform = func.rotate(copy.deepcopy(source), e_axis, angle)
@@ -82,38 +122,18 @@ def process_vec(
     voxel_volume = func.voxelize(rotated_mesh, voxel_size)
     print("  voxelized")
     restored_mesh = func.restore_rotate_and_move_back(voxel_volume.matrix, voxel_size, source, transform)
-    dist, _ = func.get_distances(restored_mesh, source)
-    with connection:
-        cursor.execute(
-            """
-            INSERT INTO "result"
-            (rotation_data_id, icp, min_dist, max_dist)
-            VALUES (?, ?, ?, ?)
-            """,
-            (last_id, False, np.min(dist), np.max(dist))
-        )
-        last_id = cursor.lastrowid
-    with connection:
-        for q in [50, 60, 70, 80, 90, 95, 98, 99]:
-            cursor.execute(
-                """
-                INSERT INTO "quantile" (result_id, quantile, "value")
-                VALUES (?, ?, ?)
-                """,
-                (last_id, q, np.quantile(dist, q / 100))
-            )
+    restored_mesh_icp = func.icp(source, restored_mesh)
+    dist = calc_dist(connection, last_id, restored_mesh, source, False)
     print("  distance calculated")
+    dist_icp = calc_dist(connection, last_id, restored_mesh_icp, source, True)
+    print("  icp distance calculated")
     rotated_mesh.export(dir_path / "rotated.stl")
     with h5py.File(dir_path / "voxels.h5", "w") as f:
         f.create_dataset("volume", data=voxel_volume.matrix, compression="gzip")
     restored_mesh.export(dir_path / "restored.stl")
-    plt.figure()
-    plt.hist(dist, bins=20)
-    plt.title(f"axis: ({e_axis[0]:.3f}, {e_axis[1]:.3f}, {e_axis[2]:.3f}) angle: {angle_grad}")
-    plt.xlabel("distance")
-    plt.ylabel("vertices")
-    plt.savefig(dir_path / "hist.svg")
-    plt.close()
+    restored_mesh_icp.export(dir_path / "restored_icp.stl")
+    hist(dist, e_axis, angle_grad, dir_path / "hist.svg", "no ICP")
+    hist(dist_icp, e_axis, angle_grad, dir_path / "hist_icp.svg", "ICP")
 
 
 def run(root_dir: str, num: int, vox_size: float) -> None:
