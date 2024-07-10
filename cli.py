@@ -47,6 +47,33 @@ def create_tables_if_not_exist(connection: sqlite3.Connection) -> None:
                 UNIQUE (result_id, quantile)
             )
         """)
+        cursor.execute("""
+            CREATE VIEW IF NOT EXISTS view_result
+            (id, angle, max_dist_no_icp, q90_no_icp, q95_no_icp, q99_no_icp, max_dist_icp, q90_icp, q95_icp, q99_icp)
+            AS
+            SELECT d.id,d.angle_grad,
+                   round(r1.max_dist, 3),
+                   round(q190.value, 3),round(q195.value, 3),round(q199.value, 3),
+                   round(r2.max_dist, 3),
+                   round(q290.value, 3),round(q295.value, 3),round(q299.value, 3)
+            FROM data d
+            JOIN result r1 on
+                d.id = r1.rotation_data_id AND NOT r1.icp
+            LEFT JOIN quantile q190 ON
+                r1.id = q190.result_id AND q190.quantile = 90
+            LEFT JOIN quantile q195 ON
+                r1.id = q195.result_id AND q195.quantile = 95
+            LEFT JOIN quantile q199 ON
+                r1.id = q199.result_id AND q199.quantile = 99
+            JOIN result r2 on
+                d.id = r2.rotation_data_id AND r2.icp
+            LEFT JOIN quantile q290 ON
+                r2.id = q290.result_id AND q290.quantile = 90
+            LEFT JOIN quantile q295 ON
+                r2.id = q295.result_id AND q295.quantile = 95
+            LEFT JOIN quantile q299 ON
+                r2.id = q299.result_id AND q299.quantile = 99
+        """)
 
 
 def calc_dist(
