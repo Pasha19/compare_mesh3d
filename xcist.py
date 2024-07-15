@@ -2,6 +2,7 @@ import func
 
 import json
 import gecatsim as xc
+import gecatsim.reconstruction.pyfiles.recon as recon
 import matplotlib.pyplot as plt
 import numpy as np
 import pathlib
@@ -10,9 +11,8 @@ import shutil
 from PIL import Image
 
 
-def init(phantom: pathlib.Path, result: pathlib.Path, rows: int, cols: int, views: int) -> xc.CatSim:
+def init_common(result: pathlib.Path, rows: int, cols: int, views: int) -> xc.CatSim:
     ct = xc.CatSim()
-    ct.phantom.filename = str(phantom.resolve() / phantom.stem) + ".json"
     ct.protocol.viewsPerRotation = views
     ct.protocol.viewCount = ct.protocol.viewsPerRotation
     ct.protocol.stopViewId = ct.protocol.viewCount - 1
@@ -23,6 +23,23 @@ def init(phantom: pathlib.Path, result: pathlib.Path, rows: int, cols: int, view
     ct.scanner.detectorColSize = 0.5
     ct.scanner.detectorRowSize = 0.5
     ct.resultsName = str(result.resolve())
+    return ct
+
+
+def init(phantom: pathlib.Path, result: pathlib.Path, rows: int, cols: int, views: int) -> xc.CatSim:
+    ct = init_common(result, rows, cols, views)
+    ct.phantom.filename = str(phantom.resolve() / phantom.stem) + ".json"
+    return ct
+
+
+def init_rec(result: pathlib.Path, rows: int, cols: int, views: int) -> xc.CatSim:
+    ct = init_common(result, rows, cols, views)
+    ct.protocol.viewsPerRotation = views
+    ct.do_Recon = 1
+    ct.recon.sliceCount = max(rows, cols)
+    ct.recon.sliceThickness = 0.2
+    ct.recon.imageSize = 256
+    ct.recon.fov = 50.0
     return ct
 
 
@@ -60,7 +77,7 @@ def normalize(data: np.ndarray) -> np.ndarray:
     return (data - np.min(data)) / (np.max(data) - np.min(data))
 
 
-def save_img(data: np.ndarray, output: str) -> None:
+def save_img(data: np.ndarray, output: pathlib.Path) -> None:
     viridis_cmap = plt.get_cmap("viridis")
     norm_data = normalize(data)
     im = Image.fromarray((255 * viridis_cmap(norm_data)).astype(np.uint8))
@@ -85,10 +102,17 @@ def main() -> None:
     # gen_files(raw_path, json_path)
     projs_path = plane_path / "projs"
     side = 256
-    views = 10
-    ct = init(plane_path, projs_path, side, side, views)
-    ct.run_all()
-    raw_to_pngs(projs_path.with_suffix(".prep"), projs_path, views, side, side)
+    views = 180
+    # ct = init(plane_path, projs_path, side, side, views)
+    # ct.run_all()
+    # raw_to_pngs(projs_path.with_suffix(".prep"), projs_path, views, side, side)
+    ct = init_rec(projs_path, side, side, views)
+    recon.recon(ct)
+    rec_path = plane_path / "rec"
+    rec_path.mkdir(parents=True, exist_ok=True)
+    raw = xc.rawread(str(projs_path) + ("_256x256x256.raw"), (256, 256, 256), "float")
+    for i in range(raw.shape[0]):
+        save_img(raw[i], rec_path / f"rec_{i}.png")
 
 
 if __name__ == '__main__':
