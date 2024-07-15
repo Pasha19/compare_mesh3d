@@ -67,6 +67,8 @@ def gen_files(raw_path: pathlib.Path, json_path: pathlib.Path) -> None:
     vox_size = 0.02
     plane = func.generate_plane(10)
     volume = func.voxelize(plane, 0.02)
+    volume = np.swapaxes(volume, 0, 2)
+    volume = volume.copy(order="C")
     xc.rawwrite(raw_path, volume.astype(np.float32))
     phantom_desc = gen_json(volume, raw_path, vox_size * size)
     with (open(json_path, "w", newline="\n")) as f:
@@ -99,13 +101,13 @@ def main() -> None:
     plane_path.mkdir(parents=True, exist_ok=True)
     raw_path = plane_path / "plane.raw"
     json_path = plane_path / "plane.json"
-    # gen_files(raw_path, json_path)
+    gen_files(raw_path, json_path)
     projs_path = plane_path / "projs"
     side = 256
     views = 180
-    # ct = init(plane_path, projs_path, side, side, views)
-    # ct.run_all()
-    # raw_to_pngs(projs_path.with_suffix(".prep"), projs_path, views, side, side)
+    ct = init(plane_path, projs_path, side, side, views)
+    ct.run_all()
+    raw_to_pngs(projs_path.with_suffix(".prep"), projs_path, views, side, side)
     ct = init_rec(projs_path, side, side, views)
     recon.recon(ct)
     rec_path = plane_path / "rec"
