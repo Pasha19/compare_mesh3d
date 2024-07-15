@@ -15,15 +15,14 @@ def rotate(
     return mesh, rot
 
 
-def voxelize(mesh: trimesh.Trimesh, vox_size: float) -> trimesh.voxel.VoxelGrid:
-    sphere: trimesh.primitives.Sphere = mesh.bounding_sphere
-    if not hasattr(sphere.primitive, "radius"):
-        raise RuntimeError("Sphere has no radius")
-    radius = int(sphere.primitive.radius / vox_size + 0.5)
-    volume = trimesh.voxel.creation.local_voxelize(mesh, sphere.center, vox_size, radius)
+def voxelize(mesh: trimesh.Trimesh, vox_size: float) -> np.ndarray:
+    size = np.max(mesh.extents)
+    radius = int(size/2 / vox_size + 0.5) + 2
+    center = (mesh.bounds[0] + mesh.bounds[1]) / 2
+    volume = trimesh.voxel.creation.local_voxelize(mesh, center, vox_size, radius)
     if volume is None:
         raise RuntimeError("Could not voxelize mesh")
-    return volume
+    return volume.matrix
 
 
 def restore_rotate_and_move_back(
