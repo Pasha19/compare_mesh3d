@@ -1,0 +1,17 @@
+# Made by SmartEngines (@ShutovMikhail)
+# Density souce: S.J. Duclos et al. / Nuclear Instruments and Methods in Physics Research A 505 (2003) 68–71. https://doi.org/10.1016/S0168-9002(03)01022-2
+# Material composition source: same as density
+
+# Material name:
+# P43 - Gd(2.0)O(2.0)S(1.0):Tb(0.05) #neglect Tb
+
+# Number of elements:
+3
+
+# Density:
+7.5
+
+# Atomic number(s) and corresponding mass fraction(s):
+8    0.084210    # oxygen
+16    0.084210   # sulfur
+64    0.826316    # gadolinium

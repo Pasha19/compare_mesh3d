@@ -1,45 +1,30 @@
 import func
 
+import copy
+import datetime
 import json
 import gecatsim as xc
-import gecatsim.reconstruction.pyfiles.recon as recon
 import matplotlib.pyplot as plt
 import numpy as np
 import pathlib
+import random
+import roma
 import shutil
 
 from PIL import Image
 
 
-def init_common(result: pathlib.Path, rows: int, cols: int, views: int) -> xc.CatSim:
-    ct = xc.CatSim()
-    ct.protocol.viewsPerRotation = views
-    ct.protocol.viewCount = ct.protocol.viewsPerRotation
-    ct.protocol.stopViewId = ct.protocol.viewCount - 1
-    ct.scanner.detectorColsPerMod = 1
-    ct.scanner.detectorRowsPerMod = rows
-    ct.scanner.detectorColCount = cols
-    ct.scanner.detectorRowCount = ct.scanner.detectorRowsPerMod
-    ct.scanner.detectorColSize = 0.5
-    ct.scanner.detectorRowSize = 0.5
-    ct.resultsName = str(result.resolve())
-    return ct
-
-
-def init(phantom: pathlib.Path, result: pathlib.Path, rows: int, cols: int, views: int) -> xc.CatSim:
-    ct = init_common(result, rows, cols, views)
-    ct.phantom.filename = str(phantom.resolve() / phantom.stem) + ".json"
-    return ct
-
-
-def init_rec(result: pathlib.Path, rows: int, cols: int, views: int) -> xc.CatSim:
-    ct = init_common(result, rows, cols, views)
-    ct.protocol.viewsPerRotation = views
-    ct.do_Recon = 1
-    ct.recon.sliceCount = max(rows, cols)
-    ct.recon.sliceThickness = 0.2
-    ct.recon.imageSize = 256
-    ct.recon.fov = 50.0
+def init(cfg_path: pathlib.Path, local_cfg_path: pathlib.Path) -> xc.CatSim:
+    ct = xc.CatSim(
+        cfg_path / "Phantom.cfg",
+        cfg_path / "Physics.cfg",
+        cfg_path / "Protocol.cfg",
+        cfg_path / "Scanner.cfg"
+    )
+    if local_cfg_path.exists() and local_cfg_path.is_dir():
+        cfgs = list(local_cfg_path.glob("*.cfg"))
+        if len(cfgs) != 0:
+            ct.load_cfg(*cfgs)
     return ct
 
 
@@ -62,19 +47,6 @@ def gen_json(volume: np.ndarray, raw_path: pathlib.Path, vox_size: float) -> dic
     return result
 
 
-def gen_files(raw_path: pathlib.Path, json_path: pathlib.Path) -> None:
-    size = 10
-    vox_size = 0.02
-    plane = func.generate_plane(10)
-    volume = func.voxelize(plane, 0.02)
-    volume = np.swapaxes(volume, 0, 2)
-    volume = volume.copy(order="C")
-    xc.rawwrite(raw_path, volume.astype(np.float32))
-    phantom_desc = gen_json(volume, raw_path, vox_size * size)
-    with (open(json_path, "w", newline="\n")) as f:
-        json.dump(phantom_desc, f, indent=4)
-
-
 def normalize(data: np.ndarray) -> np.ndarray:
     return (data - np.min(data)) / (np.max(data) - np.min(data))
 
@@ -95,26 +67,85 @@ def raw_to_pngs(raw_path: pathlib.Path, pngs_path: pathlib.Path, scans: int, row
         save_img(raw[i], pngs_path / f"{raw_path.name}_{i}.png")
 
 
+def process_rot_vec(rot_vec, data_path: pathlib.Path, obj=func.generate_plane(10)) -> None:
+    angle = rot_vec.norm()
+    e_axis = rot_vec / angle
+    angle = float(angle)
+    angle_grad = int(angle / np.pi * 180 + 0.5)
+    e_axis = e_axis.tolist()
+    now = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+    rand = random.randint(1, 999)
+    rot_vec_path = data_path / f"{now}_{rand}"
+    rot_vec_path.mkdir(parents=True)
+    rotated_mesh, _ = func.rotate(copy.deepcopy(obj), e_axis, angle)
+    rotated_mesh.export(rot_vec_path / "mesh.stl")
+    vox_size = 0.02
+    volume = func.voxelize(rotated_mesh, vox_size)
+    volume = np.transpose(volume,(2, 0, 1))
+    volume = volume.copy(order="C")
+    volume_raw_file = rot_vec_path / "volume.raw"
+    xc.rawwrite(volume_raw_file, volume.astype(np.float32))
+    phantom_desc = gen_json(volume, volume_raw_file, vox_size * 10)
+    with (open(rot_vec_path / "phantom.json", "w", newline="\n")) as f:
+        json.dump(phantom_desc, f, indent=4)
+    desc = {
+        "axis": rot_vec.tolist(),
+        "e_axis": e_axis,
+        "angle": angle,
+        "angle_grad": angle_grad,
+        "shape": volume.shape,
+        "voxel_size": vox_size,
+    }
+    with (open(rot_vec_path / "desc.json", "w", newline="\n")) as f:
+        json.dump(desc, f, indent=4)
+
+
+def gen_data(data_path: pathlib.Path, num: int) -> None:
+    rot_vecs = roma.utils.random_rotvec(num)
+    n = 0
+    for rot_vec in rot_vecs:
+        process_rot_vec(rot_vec, data_path)
+        n += 1
+        print(f"done {n}/{num}")
+
+
+def gen_proj(root_path: pathlib.Path, obj_path: pathlib.Path) -> None:
+    ct = init(root_path / "cfg", obj_path / "cfg")
+    ct.phantom.filename = str(obj_path / "phantom.json")
+    ct.resultsName = str(obj_path / "projs")
+    ct.run_all()
+    with open(obj_path / "desc.json", "r+", newline="\n") as f:
+        desc = json.load(f)
+        desc["views"] = ct.protocol.stopViewId - ct.protocol.startViewId + 1
+        desc["rows"] = ct.scanner.detectorRowCount
+        desc["cols"] = ct.scanner.detectorColCount
+        desc["size"] = {
+            "col": ct.scanner.detectorColSize,
+            "row": ct.scanner.detectorRowSize,
+        }
+        f.seek(0)
+        f.truncate()
+        json.dump(desc, f, indent=4)
+
+
+def projections(root_path: pathlib.Path, data_path: pathlib.Path) -> None:
+    for obj_path in data_path.iterdir():
+        if not obj_path.is_dir():
+            continue
+        gen_proj(root_path, obj_path)
+
+
 def main() -> None:
     root_path = pathlib.Path().resolve()
-    plane_path = root_path / "plane"
-    plane_path.mkdir(parents=True, exist_ok=True)
-    raw_path = plane_path / "plane.raw"
-    json_path = plane_path / "plane.json"
-    gen_files(raw_path, json_path)
-    projs_path = plane_path / "projs"
-    side = 256
-    views = 180
-    ct = init(plane_path, projs_path, side, side, views)
-    ct.run_all()
-    raw_to_pngs(projs_path.with_suffix(".prep"), projs_path, views, side, side)
-    ct = init_rec(projs_path, side, side, views)
-    recon.recon(ct)
-    rec_path = plane_path / "rec"
-    rec_path.mkdir(parents=True, exist_ok=True)
-    raw = xc.rawread(str(projs_path) + ("_256x256x256.raw"), (256, 256, 256), "float")
-    for i in range(raw.shape[0]):
-        save_img(raw[i], rec_path / f"rec_{i}.png")
+    data_path = root_path / "data"
+    data_path.mkdir(parents=True, exist_ok=True)
+
+    my_path = xc.pyfiles.CommonTools.my_path
+    my_path.add_search_path(str(root_path / "spectrum"))
+    my_path.add_search_path(str(root_path / "material"))
+
+    gen_data(data_path, 5)
+    projections(root_path, data_path)
 
 
 if __name__ == '__main__':
