@@ -55,6 +55,7 @@ def save_img(data: np.ndarray, output: pathlib.Path) -> None:
     viridis_cmap = plt.get_cmap("viridis")
     norm_data = normalize(data)
     im = Image.fromarray((255 * viridis_cmap(norm_data)).astype(np.uint8))
+    im.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
     im.save(output)
 
 
@@ -135,6 +136,37 @@ def projections(root_path: pathlib.Path, data_path: pathlib.Path) -> None:
         gen_proj(root_path, obj_path)
 
 
+def make_pngs(data_path: pathlib.Path) -> None:
+    # import vedo
+    for obj_path in data_path.iterdir():
+        if not obj_path.is_dir():
+            continue
+        # with open(obj_path / "phantom.json", "r") as f:
+        #     phantom_desc = json.load(f)
+        #     raw_to_pngs(
+        #         obj_path / "volume.raw",
+        #         obj_path / "volume",
+        #         phantom_desc["slices"][0],
+        #         phantom_desc["rows"][0],
+        #         phantom_desc["cols"][0],
+        #     )
+        #     volume_raw = xc.rawread(
+        #         obj_path / "volume.raw",
+        #         (phantom_desc["slices"][0], phantom_desc["rows"][0], phantom_desc["cols"][0]),
+        #         "float",
+        #     )
+        #     vedo.show(vedo.Volume(volume_raw), new=True)
+        with open(obj_path / "desc.json", "r") as f:
+            desc = json.load(f)
+            raw_to_pngs(
+                obj_path / "projs.prep",
+                obj_path / "projs",
+                desc["views"],
+                desc["rows"],
+                desc["cols"],
+            )
+
+
 def main() -> None:
     root_path = pathlib.Path().resolve()
     data_path = root_path / "data"
@@ -146,6 +178,7 @@ def main() -> None:
 
     gen_data(data_path, 5)
     projections(root_path, data_path)
+    make_pngs(data_path)
 
 
 if __name__ == '__main__':
