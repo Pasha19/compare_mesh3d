@@ -43,12 +43,14 @@ def main() -> None:
     now = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
     with open(root_path / f"ex2_{now}.tsv", "w", newline="") as csvfile:
         writer = csv.writer(csvfile, delimiter="\t", lineterminator="\n")
-        writer.writerow(["blur", "noise", "e_x", "e_y", "e_z", "angle", "angle_deg", "dist"])
+        writer.writerow(["blur", "noise", "e_x", "e_y", "e_z", "angle", "angle_deg", "dist", "d1", "d2"])
         for n in range(num):
-            rot_vec = rot_vecs[n]
-            dist = run(rot_vec, args.vox_size, args.blur, args.noise)
-            axis, angle = compare.axis_angle_from_rotvec(rot_vec)
-            writer.writerow([args.blur, args.noise, *axis, angle, int(np.rad2deg(angle) + 0.5), dist])
+            for blur in args.blur:
+                for noise in args.noise:
+                    rot_vec = rot_vecs[n]
+                    dist = run(rot_vec, args.vox_size, blur, noise)
+                    axis, angle = compare.axis_angle_from_rotvec(rot_vec)
+                    writer.writerow([blur, noise, *axis, angle, int(np.rad2deg(angle) + 0.5), *dist])
             print(f"Done {n+1}/{num}")
 
 
