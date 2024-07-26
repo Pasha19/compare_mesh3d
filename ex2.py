@@ -2,9 +2,10 @@ import compare
 
 import csv
 import datetime
+import json
 import numpy as np
 import pathlib
-import roma
+import torch
 
 
 def run(rotvec, voxel_size: float, blur_size: int, noise: float) -> tuple[float, float, float]:
@@ -33,20 +34,22 @@ def main() -> None:
     args = compare.get_args()
     root_path: pathlib.Path = args.result_dir
     root_path = root_path.resolve()
+    root_path.mkdir(exist_ok=True, parents=True)
 
     num = args.num
-    n = 0
-    rot_vecs = roma.random_rotvec(num)
+    with open(args.axes.resolve(), "r") as f:
+        rot_vecs_list = json.load(f)
+    rot_vecs = torch.tensor(rot_vecs_list)
     now = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
     with open(root_path / f"ex2_{now}.tsv", "w", newline="") as csvfile:
         writer = csv.writer(csvfile, delimiter="\t", lineterminator="\n")
         writer.writerow(["blur", "noise", "e_x", "e_y", "e_z", "angle", "angle_deg", "dist"])
-        for rot_vec in rot_vecs:
+        for n in range(num):
+            rot_vec = rot_vecs[n]
             dist = run(rot_vec, args.vox_size, args.blur, args.noise)
             axis, angle = compare.axis_angle_from_rotvec(rot_vec)
             writer.writerow([args.blur, args.noise, *axis, angle, int(np.rad2deg(angle) + 0.5), dist])
-            n += 1
-            print(f"Done {n}/{num}")
+            print(f"Done {n+1}/{num}")
 
 
 if __name__ == '__main__':

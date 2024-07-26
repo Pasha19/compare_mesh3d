@@ -93,7 +93,7 @@ def do_binarization(volume: np.ndarray) -> np.ndarray:
 def bin_volume_to_mesh(volume: np.ndarray, voxel_size: float) -> vedo.Mesh:
     vol = vedo.Volume(volume)
     iso_surf = vol.isosurface(1, flying_edges=True).scale(voxel_size)
-    iso_surf.shift(vol.shape * (voxel_size/2))
+    iso_surf.shift(-vol.shape * (voxel_size/2))
     return iso_surf
 
 
@@ -202,9 +202,10 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-n", "--num", default=10, type=int)
     parser.add_argument("--vox-size", default=0.01, type=float)
-    parser.add_argument("--blur", default=2, type=int)
-    parser.add_argument("--noise", default=0.05, type=float)
+    parser.add_argument("--blur", nargs="+", type=int, required=True)
+    parser.add_argument("--noise", nargs="+", type=float, required=True)
     parser.add_argument("result_dir", type=pathlib.Path)
+    parser.add_argument("--axes", type=pathlib.Path)
     return parser.parse_args()
 
 
