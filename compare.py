@@ -202,10 +202,12 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-n", "--num", default=10, type=int)
     parser.add_argument("--vox-size", default=0.01, type=float)
-    parser.add_argument("--blur", nargs="+", type=int, required=True)
-    parser.add_argument("--noise", nargs="+", type=float, required=True)
+    parser.add_argument("--blur", nargs="+", type=int)
+    parser.add_argument("--noise", nargs="+", type=float)
     parser.add_argument("result_dir", type=pathlib.Path)
     parser.add_argument("--axes", type=pathlib.Path)
+    parser.add_argument("--tsv", type=pathlib.Path)
+    parser.add_argument("--row", type=int)
     return parser.parse_args()
 
 
