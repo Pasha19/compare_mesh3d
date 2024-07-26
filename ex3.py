@@ -18,7 +18,8 @@ def run(
 
     plane = compare.generate_plane(0.1)
     transformed_plane = plane.copy()
-    compare.do_transform(transformed_plane, rotation_axis, angle, (0.0, 0.0, 0.0))
+    dx = 0.1 * voxel_size
+    compare.do_transform(transformed_plane, rotation_axis, angle, (dx, dx, dx))
 
     volume = compare.do_voxelization(transformed_plane, voxel_size, pad=8)
     noise_volume = compare.add_noise(volume, blur_size, noise)
@@ -26,13 +27,13 @@ def run(
 
     restored_plane = compare.bin_volume_to_mesh(bin_volume, voxel_size)
 
-    restored_plane_icp = restored_plane.copy()
+    restored_plane_icp = restored_plane.clone()
     compare.do_icp(restored_plane_icp, plane)
 
     dist = compare.calc_distance(plane, restored_plane_icp)
-    theta, icp_rot_axis, icp_rot_angle = compare.calc_rot_distance(rotvec, restored_plane, restored_plane_icp)
+    theta = compare.calc_rot_distance(rotvec, restored_plane, restored_plane_icp)
 
-    return dist, theta
+    return dist, theta[0]
 
 
 def main() -> None:
@@ -48,12 +49,14 @@ def main() -> None:
     now = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
     with open(root_path / f"ex3_{now}.tsv", "w", newline="") as csvfile:
         writer = csv.writer(csvfile, delimiter="\t", lineterminator="\n")
-        writer.writerow(["blur", "noise", "e_x", "e_y", "e_z", "angle", "angle_deg", "dist", "icp_angle_err"])
+        writer.writerow(["blur", "noise", "e_x", "e_y", "e_z", "angle", "angle_deg", "dist", "d1", "d2", "icp_angle_err"])
         for n in range(num):
-            rot_vec = rot_vecs[n]
-            dist, theta = run(rot_vec, args.vox_size, args.blur, args.noise)
-            axis, angle = compare.axis_angle_from_rotvec(rot_vec)
-            writer.writerow([args.blur, args.noise, *axis, angle, int(np.rad2deg(angle) + 0.5), dist, theta])
+            for blur in args.blur:
+                for noise in args.noise:
+                    rot_vec = rot_vecs[n]
+                    dist, theta = run(rot_vec, args.vox_size, blur, noise)
+                    axis, angle = compare.axis_angle_from_rotvec(rot_vec)
+                    writer.writerow([blur, noise, *axis, angle, int(np.rad2deg(angle) + 0.5), *dist, theta])
             print(f"Done {n+1}/{num}")
 
 
