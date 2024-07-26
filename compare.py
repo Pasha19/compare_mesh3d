@@ -59,8 +59,12 @@ def do_transform(
         obj: vedo.Mesh,
         rotation_axis: tuple[float, float, float],
         angle: float,
+        move: tuple[float, float, float],
 ) -> None:
-    lt = vedo.LinearTransform().rotate(angle, rotation_axis, rad=True)
+    lt = (vedo.LinearTransform()
+          .rotate(angle, rotation_axis, rad=True)
+          .translate(move)
+          )
     obj.apply_transform(lt)
 
 
@@ -88,7 +92,9 @@ def do_binarization(volume: np.ndarray) -> np.ndarray:
 
 def bin_volume_to_mesh(volume: np.ndarray, voxel_size: float) -> vedo.Mesh:
     vol = vedo.Volume(volume)
-    return vol.isosurface_discrete(1).scale(voxel_size)
+    iso_surf = vol.isosurface(1, flying_edges=True).scale(voxel_size)
+    iso_surf.shift(vol.shape * (voxel_size/2))
+    return iso_surf
 
 
 def do_icp(mesh: vedo.Mesh, target: vedo.Mesh) -> None:
@@ -134,7 +140,7 @@ def run(
 
     plane = generate_plane(0.1)
     transformed_plane = plane.copy()
-    do_transform(transformed_plane, rotation_axis, angle)
+    do_transform(transformed_plane, rotation_axis, angle, (0.0, 0.0, 0.0))
 
     transformed_plane.write(str(result_path / "transformed_plane.stl"))
 
@@ -192,14 +198,18 @@ def hist(data: list[float], file_path: pathlib.Path, title: str) -> None:
     plt.close()
 
 
-def main() -> None:
+def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-n", "--num", default=10, type=int)
     parser.add_argument("--vox-size", default=0.01, type=float)
     parser.add_argument("--blur", default=2, type=int)
     parser.add_argument("--noise", default=0.05, type=float)
     parser.add_argument("result_dir", type=pathlib.Path)
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = get_args()
     root_path: pathlib.Path = args.result_dir
     root_path = root_path.resolve()
 
