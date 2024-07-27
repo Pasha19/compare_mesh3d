@@ -68,8 +68,12 @@ def do_transform(
     obj.apply_transform(lt)
 
 
-def do_voxelization(obj: vedo.Mesh, voxel_size: float, pad: int) -> np.ndarray:
-    vol = obj.binarize((1, 0), spacing=(voxel_size, voxel_size, voxel_size))
+def do_voxelization(obj: vedo.Mesh, diag: float, voxel_size: float, pad: int) -> np.ndarray:
+    diag_vox = int(diag / voxel_size)
+    dim = diag_vox + 2*pad
+    side_in_mesh = dim * voxel_size
+    vol = obj.binarize((1, 0), spacing=(voxel_size, voxel_size, voxel_size),
+                       origin=(-side_in_mesh / 2, -side_in_mesh / 2, -side_in_mesh / 2), dims=(dim, dim, dim))
     volume = vol.tonumpy().astype(np.float32)
     if pad > 0:
         volume = np.pad(volume, pad)
@@ -200,44 +204,6 @@ def hist(data: list[float], file_path: pathlib.Path, title: str) -> None:
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-n", "--num", default=10, type=int)
-    parser.add_argument("--vox-size", default=0.01, type=float)
-    parser.add_argument("--blur", nargs="+", type=int)
-    parser.add_argument("--noise", nargs="+", type=float)
-    parser.add_argument("result_dir", type=pathlib.Path)
-    parser.add_argument("--axes", type=pathlib.Path)
-    parser.add_argument("--tsv", type=pathlib.Path)
-    parser.add_argument("--row", type=int)
+    parser.add_argument("-i", "--input", required=True, type=pathlib.Path)
+    parser.add_argument("-o", "--output", required=True, type=pathlib.Path)
     return parser.parse_args()
-
-
-def main() -> None:
-    args = get_args()
-    root_path: pathlib.Path = args.result_dir
-    root_path = root_path.resolve()
-
-    num = args.num
-    n = 0
-    rot_vecs = roma.random_rotvec(num)
-    dists1 = []
-    dists2 = []
-    angles = []
-    for rot_vec in rot_vecs:
-        now = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
-        result_path = root_path / f"run_{now}"
-        result_path.mkdir(exist_ok=True, parents=True)
-        dist, angle = run(rot_vec, args.vox_size, args.blur, args.noise, result_path)
-        dists1.append(dist[1])
-        dists2.append(dist[2])
-        angles.append(int(np.rad2deg(angle) + 0.5))
-        n += 1
-        print(f"Done {n}/{num}")
-    hist(dists1, root_path / "hist_dist1.svg", "plane to icp dist")
-    hist(dists2, root_path / "hist_dist2.svg", "icp to plane dist")
-    hist(angles, root_path / "hist_angles.svg", "angles hist")
-    plane = generate_plane(0.1)
-    plane.write(str(root_path / "plane.stl"))
-
-
-if __name__ == '__main__':
-    main()

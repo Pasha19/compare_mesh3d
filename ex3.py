@@ -1,63 +1,57 @@
 import compare
 
 import csv
-import datetime
-import json
-import numpy as np
 import pathlib
+import pandas as pd
+import sys
 import torch
 
 
-def run(
-        rotvec,
+def run(std_vox_size: float,
         voxel_size: float,
-        blur_size: int,
-        noise: float,
+        angle: float,
+        dx: float, dy: float, dz: float,
+        e_x: float, e_y: float, e_z: float,
 ) -> tuple[tuple[float, float, float], float]:
-    rotation_axis, angle = compare.axis_angle_from_rotvec(rotvec)
-
     plane = compare.generate_plane(0.1)
     transformed_plane = plane.copy()
-    dx = 0.1 * voxel_size
-    compare.do_transform(transformed_plane, rotation_axis, angle, (dx, dx, dx))
-
-    volume = compare.do_voxelization(transformed_plane, voxel_size, pad=8)
-    noise_volume = compare.add_noise(volume, blur_size, noise)
-    bin_volume = compare.do_binarization(noise_volume)
-
-    restored_plane = compare.bin_volume_to_mesh(bin_volume, voxel_size)
-
+    voxel_size *= std_vox_size
+    dx = dx * voxel_size
+    dy = dy * voxel_size
+    dz = dz * voxel_size
+    compare.do_transform(transformed_plane, (e_x, e_y, e_z), angle, (dx, dy, dz))
+    volume = compare.do_voxelization(transformed_plane, plane.diagonal_size(), voxel_size, pad=4)
+    restored_plane = compare.bin_volume_to_mesh(volume, voxel_size)
     restored_plane_icp = restored_plane.clone()
     compare.do_icp(restored_plane_icp, plane)
-
     dist = compare.calc_distance(plane, restored_plane_icp)
-    theta = compare.calc_rot_distance(rotvec, restored_plane, restored_plane_icp)
-
+    theta = compare.calc_rot_distance(torch.tensor([e_x, e_y, e_z]) * angle, restored_plane, restored_plane_icp)
     return dist, theta[0]
 
 
 def main() -> None:
     args = compare.get_args()
-    root_path: pathlib.Path = args.result_dir
-    root_path = root_path.resolve()
-    root_path.mkdir(exist_ok=True, parents=True)
+    in_tsv_path: pathlib.Path = args.input
+    out_tsv_path: pathlib.Path = args.output
+    out_tsv_path.parent.mkdir(exist_ok=True, parents=True)
 
-    num = args.num
-    with open(args.axes.resolve(), "r") as f:
-        rot_vecs_list = json.load(f)
-    rot_vecs = torch.tensor(rot_vecs_list)
-    now = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
-    with open(root_path / f"ex3_{now}.tsv", "w", newline="") as csvfile:
-        writer = csv.writer(csvfile, delimiter="\t", lineterminator="\n")
-        writer.writerow(["blur", "noise", "e_x", "e_y", "e_z", "angle", "angle_deg", "dist", "d1", "d2", "icp_angle_err"])
-        for n in range(num):
-            for blur in args.blur:
-                for noise in args.noise:
-                    rot_vec = rot_vecs[n]
-                    dist, theta = run(rot_vec, args.vox_size, blur, noise)
-                    axis, angle = compare.axis_angle_from_rotvec(rot_vec)
-                    writer.writerow([blur, noise, *axis, angle, int(np.rad2deg(angle) + 0.5), *dist, theta])
-            print(f"Done {n+1}/{num}")
+    in_tsv = pd.read_csv(in_tsv_path, sep="\t", lineterminator="\n")
+    num = len(in_tsv)
+
+    n = 0
+    with open(out_tsv_path, "w", newline="") as f:
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+        writer.writerow(["voxel_size", "angle", "dx", "dy", "dz", "e_x", "e_y", "e_z", "max_dist", "d1", "d2", "icp_angle_err"])
+        std_vox_size = 0.02
+        for row in in_tsv.itertuples(index=True):
+            params = [row.voxel_size, row.angle, row.dx, row.dy, row.dz, row.e_x, row.e_y, row.e_z]
+            dist, theta = run(std_vox_size, *params)
+            writer.writerow(params + [round(d / (std_vox_size * row.voxel_size), 1) for d in dist] + [theta])
+
+            n += 1
+            if n % 10 == 0:
+                f.flush()
+            print(f"done {n} / {num}", file=sys.stderr)
 
 
 if __name__ == '__main__':
