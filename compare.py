@@ -1,6 +1,4 @@
 import argparse
-import datetime
-import json
 import matplotlib.pyplot as plt
 import numpy as np
 import pathlib
@@ -55,19 +53,6 @@ def generate_plane(scale: float) -> vedo.Mesh:
     return box.boolean("intersect", cyls).scale(scale)
 
 
-def do_transform(
-        obj: vedo.Mesh,
-        rotation_axis: tuple[float, float, float],
-        angle: float,
-        move: tuple[float, float, float],
-) -> None:
-    lt = (vedo.LinearTransform()
-          .rotate(angle, rotation_axis, rad=True)
-          .translate(move)
-          )
-    obj.apply_transform(lt)
-
-
 def do_voxelization(obj: vedo.Mesh, diag: float, voxel_size: float, pad: int) -> np.ndarray:
     diag_vox = int(diag / voxel_size)
     dim = diag_vox + 2*pad
@@ -75,8 +60,6 @@ def do_voxelization(obj: vedo.Mesh, diag: float, voxel_size: float, pad: int) ->
     vol = obj.binarize((1, 0), spacing=(voxel_size, voxel_size, voxel_size),
                        origin=(-side_in_mesh / 2, -side_in_mesh / 2, -side_in_mesh / 2), dims=(dim, dim, dim))
     volume = vol.tonumpy().astype(np.float32)
-    if pad > 0:
-        volume = np.pad(volume, pad)
     return volume
 
 
@@ -94,10 +77,15 @@ def do_binarization(volume: np.ndarray) -> np.ndarray:
     return volume > 0.5
 
 
-def bin_volume_to_mesh(volume: np.ndarray, voxel_size: float) -> vedo.Mesh:
-    vol = vedo.Volume(volume)
-    iso_surf = vol.isosurface(1, flying_edges=True).scale(voxel_size)
-    iso_surf.shift(-vol.shape * (voxel_size/2))
+def bin_volume_to_volume(volume: np.ndarray, voxel_size: float) -> vedo.Volume:
+    origin = -voxel_size * volume.shape[0] / 2, -voxel_size * volume.shape[1] / 2, -voxel_size * volume.shape[2] / 2
+    vol = vedo.Volume(volume, spacing=(voxel_size, voxel_size, voxel_size), origin=origin)
+    return vol
+
+
+def bin_volume_to_mesh(volume: np.ndarray, voxel_size: float, iso_value: float) -> vedo.Mesh:
+    vol = bin_volume_to_volume(volume, voxel_size)
+    iso_surf = vol.isosurface(iso_value, flying_edges=True)
     return iso_surf
 
 
@@ -133,67 +121,6 @@ def calc_rot_distance(
     return theta, icp_rot_axis, icp_rot_angle
 
 
-def run(
-        rotvec,
-        voxel_size: float,
-        blur_size: int,
-        noise: float,
-        result_path: pathlib.Path,
-) -> tuple[tuple[float, float, float], float]:
-    rotation_axis, angle = axis_angle_from_rotvec(rotvec)
-
-    plane = generate_plane(0.1)
-    transformed_plane = plane.copy()
-    do_transform(transformed_plane, rotation_axis, angle, (0.0, 0.0, 0.0))
-
-    transformed_plane.write(str(result_path / "transformed_plane.stl"))
-
-    volume = do_voxelization(transformed_plane, voxel_size, pad=8)
-    noise_volume = add_noise(volume, blur_size, noise)
-
-    plt.figure()
-    plt.hist(noise_volume.ravel(), bins="auto")
-    plt.savefig(result_path / "histogram.svg")
-    plt.close()
-
-    bin_volume = do_binarization(noise_volume)
-
-    restored_plane = bin_volume_to_mesh(bin_volume, voxel_size)
-    restored_plane.write(str(result_path / "restored_plane.stl"))
-
-    restored_plane_icp = restored_plane.copy()
-    do_icp(restored_plane_icp, plane)
-
-    restored_plane_icp.write(str(result_path / "restored_plane_icp.stl"))
-
-    dist = calc_distance(plane, restored_plane_icp)
-
-    theta, icp_rot_axis, icp_rot_angle = calc_rot_distance(rotvec, restored_plane, restored_plane_icp)
-
-    with open(result_path / "desc.json", "w", newline="\n") as f:
-        desc = {
-            "rotation": {
-                "axis": rotation_axis,
-                "angle": angle,
-                "angle_deg": int(np.rad2deg(angle) + 0.5),
-            },
-            "blur_size": blur_size,
-            "noise": noise,
-            "voxel_size": voxel_size,
-            "distance": dist,
-            "rotation_dist": theta,
-            "rotation_dist_deg": int(np.rad2deg(theta) + 0.5),
-            "icp_rotation": {
-                "axis": icp_rot_axis,
-                "angle": icp_rot_angle,
-                "angle_deg": int(np.rad2deg(icp_rot_angle) + 0.5),
-            }
-        }
-        json.dump(desc, f, indent=4)
-
-    return dist, theta
-
-
 def hist(data: list[float], file_path: pathlib.Path, title: str) -> None:
     plt.figure()
     plt.title(title)
@@ -206,4 +133,5 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", required=True, type=pathlib.Path)
     parser.add_argument("-o", "--output", required=True, type=pathlib.Path)
+    parser.add_argument("--std-vox-size", type=float, default=0.02)
     return parser.parse_args()
