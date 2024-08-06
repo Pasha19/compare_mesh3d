@@ -24,6 +24,8 @@ def run(
           )
     transformed_plane.apply_transform(lt)
     volume = compare.do_voxelization(transformed_plane, plane.diagonal_size(), voxel_size, pad=4)
+    volume = compare.add_noise(volume, 2, 0.05)
+    volume = volume > 0.5
     restored_plane = compare.bin_volume_to_mesh(volume, voxel_size, 0.5)
     dist = compare.calc_distance(transformed_plane, restored_plane)
     return dist

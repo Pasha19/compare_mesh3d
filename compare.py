@@ -73,10 +73,6 @@ def add_noise(volume: np.ndarray, blur_size: int, noise: float) -> np.ndarray:
     return t[0].numpy()
 
 
-def do_binarization(volume: np.ndarray) -> np.ndarray:
-    return volume > 0.5
-
-
 def bin_volume_to_volume(volume: np.ndarray, voxel_size: float) -> vedo.Volume:
     origin = -voxel_size * volume.shape[0] / 2, -voxel_size * volume.shape[1] / 2, -voxel_size * volume.shape[2] / 2
     vol = vedo.Volume(volume, spacing=(voxel_size, voxel_size, voxel_size), origin=origin)

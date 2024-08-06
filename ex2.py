@@ -23,6 +23,8 @@ def run(voxel_size: float,
           )
     transformed_plane.apply_transform(lt)
     volume = compare.do_voxelization(transformed_plane, plane.diagonal_size(), voxel_size, pad=4)
+    volume = compare.add_noise(volume, 2, 0.05)
+    volume = volume > 0.5
     volume_transormed = compare.bin_volume_to_volume(volume, voxel_size)
     volume_transormed.apply_transform(lt.invert())
     restored_plane = volume_transormed.isosurface(0.5, flying_edges=True)

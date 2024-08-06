@@ -24,6 +24,13 @@ def run(voxel_size: float,
           )
     transformed_plane.apply_transform(lt)
     volume = compare.do_voxelization(transformed_plane, plane.diagonal_size(), voxel_size, pad=4)
+    volume = compare.add_noise(volume, 2, 0.05)
+    import matplotlib.pyplot as plt
+    plt.hist(volume.ravel(), bins="auto", density=True)
+    plt.axvline(0.5, color='k', linestyle='dashed', linewidth=1)
+    plt.savefig("fig-hist.png", dpi=300, bbox_inches="tight")
+    plt.close()
+    volume = volume > 0.5
     restored_plane = compare.bin_volume_to_mesh(volume, voxel_size, 0.5)
     restored_plane_icp = restored_plane.clone()
     compare.do_icp(restored_plane_icp, plane)
