@@ -1,4 +1,3 @@
-import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 import pathlib
@@ -123,11 +122,3 @@ def hist(data: list[float], file_path: pathlib.Path, title: str) -> None:
     plt.hist(data, bins="auto")
     plt.savefig(file_path)
     plt.close()
-
-
-def get_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input", required=True, type=pathlib.Path)
-    parser.add_argument("-o", "--output", required=True, type=pathlib.Path)
-    parser.add_argument("--std-vox-size", type=float, default=0.02)
-    return parser.parse_args()
